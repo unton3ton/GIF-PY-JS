@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF Processor</title>
+    <style>
+        :root {
+            --bg-dark: #1a1a1a;
+            --bg-card: #2d2d2d;
+            --text-main: #e0e0e0;
+            --accent: #ff7f00;
+            --accent-hover: #e67300;
+            --border: #404040;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { color: var(--accent); margin-bottom: 30px; }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        h2 { margin-top: 0; color: var(--accent); font-size: 1.2rem; }
+
+        .file-input-wrapper {
+            margin: 15px 0;
+        }
+
+        input[type="file"] {
+            color: var(--text-main);
+        }
+
+        .slider-container {
+            margin: 15px 0;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        button {
+            background-color: var(--accent);
+            color: var(--bg-dark);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s;
+            font-size: 1rem;
+        }
+
+        button:hover { background-color: var(--accent-hover); }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+
+        .status {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            text-align: center;
+            min-height: 20px;
+        }
+        .status.error { color: #ff4444; }
+        .status.success { color: #44ff44; }
+        .hint {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-top: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎨 GIF Processor</h1>
+
+    <div class="container">
+        <div class="card">
+            <h2>📦 GIF → Кадры (ZIP)</h2>
+            <p>Загрузите GIF, чтобы получить архив со всеми кадрами в формате PNG.</p>
+            <div class="file-input-wrapper">
+                <input type="file" id="splitInput" accept="image/gif">
+            </div>
+            <button id="splitBtn">Скачать кадры (ZIP)</button>
+            <div id="splitStatus" class="status"></div>
+        </div>
+
+        <div class="card">
+            <h2>🎞️ Кадры → GIF</h2>
+            <p>Загрузите несколько изображений (PNG, JPG, GIF и др.). Файлы будут отсортированы по цифрам в имени.</p>
+            <div class="hint">📌 Для правильного порядка используйте имена вида frame_1.png, frame_2.png или frame_001.png (числа в любом месте имени).</div>
+            <div class="file-input-wrapper">
+                <input type="file" id="assembleInput" accept="image/*" multiple>
+            </div>
+            
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span>Задержка между кадрами (Duration)</span>
+                    <span id="durationValue">50 ms</span>
+                </div>
+                <input type="range" id="durationSlider" min="5" max="200" step="5" value="50">
+            </div>
+
+            <button id="assembleBtn">Собрать и скачать GIF</button>
+            <div id="assembleStatus" class="status"></div>
+            <div class="hint">⚠️ Не более 200 файлов, каждый до 20 МБ.</div>
+        </div>
+    </div>
+
+    <script>
+        function updateDurationLabel(value) {
+            document.getElementById('durationValue').textContent = value + ' ms';
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function splitGif() {
+            const fileInput = document.getElementById('splitInput');
+            const statusEl = document.getElementById('splitStatus');
+            const btn = document.getElementById('splitBtn');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                statusEl.textContent = "⚠️ Выберите GIF файл.";
+                statusEl.className = "status error";
+                return;
+            }
+            if (file.type !== 'image/gif') {
+                statusEl.textContent = "❌ Файл должен быть в формате GIF.";
+                statusEl.className = "status error";
+                return;
+            }
+            if (file.size > 20 * 1024 * 1024) {
+                statusEl.textContent = "❌ Файл слишком большой (макс. 20 МБ).";
+                statusEl.className = "status error";
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            btn.disabled = true;
+            statusEl.textContent = "⏳ Обработка...";
+            statusEl.className = "status";
+
+            try {
+                const response = await fetch('/api/split', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || "Ошибка сервера");
+                }
+
+                const blob = await response.blob();
+                downloadBlob(blob, 'frames.zip');
+                statusEl.textContent = "✅ Кадры успешно сохранены!";
+                statusEl.className = "status success";
+            } catch (error) {
+                console.error(error);
+                statusEl.textContent = `❌ Ошибка: ${error.message}`;
+                statusEl.className = "status error";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function assembleGif() {
+            const fileInput = document.getElementById('assembleInput');
+            const duration = document.getElementById('durationSlider').value;
+            const statusEl = document.getElementById('assembleStatus');
+            const btn = document.getElementById('assembleBtn');
+            const files = fileInput.files;
+
+            if (!files.length) {
+                statusEl.textContent = "⚠️ Выберите хотя бы одно изображение.";
+                statusEl.className = "status error";
+                return;
+            }
+            if (files.length > 200) {
+                statusEl.textContent = "❌ Не более 200 файлов за раз.";
+                statusEl.className = "status error";
+                return;
+            }
+            for (let i = 0; i < files.length; i++) {
+                if (files[i].size > 20 * 1024 * 1024) {
+                    statusEl.textContent = `❌ Файл "${files[i].name}" слишком большой (макс. 20 МБ).`;
+                    statusEl.className = "status error";
+                    return;
+                }
+                if (!files[i].type.startsWith('image/')) {
+                    statusEl.textContent = `❌ Файл "${files[i].name}" не является изображением.`;
+                    statusEl.className = "status error";
+                    return;
+                }
+            }
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+            formData.append('duration', duration);
+
+            btn.disabled = true;
+            statusEl.textContent = "⏳ Сборка анимации...";
+            statusEl.className = "status";
+
+            try {
+                const response = await fetch('/api/assemble', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || "Ошибка сервера");
+                }
+
+                const blob = await response.blob();
+                downloadBlob(blob, 'result.gif');
+                statusEl.textContent = "✅ GIF успешно создан!";
+                statusEl.className = "status success";
+            } catch (error) {
+                console.error(error);
+                statusEl.textContent = `❌ Ошибка: ${error.message}`;
+                statusEl.className = "status error";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('splitBtn').addEventListener('click', splitGif);
+        document.getElementById('assembleBtn').addEventListener('click', assembleGif);
+        document.getElementById('durationSlider').addEventListener('input', function(e) {
+            updateDurationLabel(e.target.value);
+        });
+        updateDurationLabel(50);
+    </script>
+</body>
+</html>
